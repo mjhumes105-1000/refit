@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-import fitz  # PyMuPDF
+import pymupdf
 import pytest
 
 from refit.record.claims import (
@@ -156,13 +156,13 @@ COVER_INFO_REPLY = (
 def make_pdf_file(path, pages):
     """pages: list of page texts; an empty string makes an image-only (scanned-like) page."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    doc = fitz.open()
+    doc = pymupdf.open()
     for text in pages:
         page = doc.new_page()
         if text:
             page.insert_text((72, 72), text, fontsize=10)
         else:
-            page.draw_rect(fitz.Rect(72, 72, 300, 300))
+            page.draw_rect(pymupdf.Rect(72, 72, 300, 300))
     doc.save(str(path))
     doc.close()
     return path

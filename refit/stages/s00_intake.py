@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlparse
 
-import fitz  # PyMuPDF
+import pymupdf
 import httpx
 from pydantic import BaseModel, Field
 
@@ -114,12 +114,12 @@ def _cache_path(path: Path, cache_root: Path) -> str:
 
 
 def cover_text(pdf_path: Path) -> str:
-    with fitz.open(str(pdf_path)) as doc:
+    with pymupdf.open(str(pdf_path)) as doc:
         return "\n".join(doc[i].get_text() for i in range(min(COVER_PAGES, doc.page_count)))
 
 
 def cover_images(pdf_path: Path, dpi: int = 200) -> tuple[bytes, ...]:
-    with fitz.open(str(pdf_path)) as doc:
+    with pymupdf.open(str(pdf_path)) as doc:
         return tuple(
             doc[i].get_pixmap(dpi=dpi).tobytes("png")
             for i in range(min(COVER_PAGES, doc.page_count))
