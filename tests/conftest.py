@@ -1,6 +1,5 @@
 from types import SimpleNamespace
 
-import pymupdf
 import pytest
 
 from refit.record.claims import (
@@ -159,18 +158,47 @@ COVER_INFO_REPLY = (
 )
 
 
+def _pdf_escape(line: str) -> str:
+    return line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
 def make_pdf_file(path, pages):
-    """pages: list of page texts; an empty string makes an image-only (scanned-like) page."""
+    """Write a minimal, valid PDF with no PDF library.
+
+    pages: list of page texts (ASCII, newline-separated lines, Helvetica 10 pt);
+    an empty string makes a drawing-only page with no text layer (scanned-like).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    doc = pymupdf.open()
-    for text in pages:
-        page = doc.new_page()
+    n = len(pages)
+    page_ids = [4 + 2 * i for i in range(n)]
+    objects = {
+        1: "<< /Type /Catalog /Pages 2 0 R >>",
+        2: f"<< /Type /Pages /Kids [{' '.join(f'{p} 0 R' for p in page_ids)}] /Count {n} >>",
+        3: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    }
+    for page_id, text in zip(page_ids, pages):
         if text:
-            page.insert_text((72, 72), text, fontsize=10)
+            lines = " T* ".join(f"({_pdf_escape(line)}) Tj" for line in text.split("\n"))
+            stream = f"BT /F1 10 Tf 12 TL 72 720 Td {lines} ET"
         else:
-            page.draw_rect(pymupdf.Rect(72, 72, 300, 300))
-    doc.save(str(path))
-    doc.close()
+            stream = "72 72 228 228 re S"
+        objects[page_id] = (
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            f"/Resources << /Font << /F1 3 0 R >> >> /Contents {page_id + 1} 0 R >>"
+        )
+        objects[page_id + 1] = f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream"
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = {}
+    for num in sorted(objects):
+        offsets[num] = len(out)
+        out += f"{num} 0 obj\n{objects[num]}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    size = max(objects) + 1
+    out += f"xref\n0 {size}\n0000000000 65535 f \n".encode("latin-1")
+    for num in range(1, size):
+        out += f"{offsets[num]:010d} 00000 n \n".encode("latin-1")
+    out += f"trailer\n<< /Size {size} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("latin-1")
+    path.write_bytes(bytes(out))
     return path
 
 

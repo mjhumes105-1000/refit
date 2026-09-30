@@ -6,11 +6,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlparse
 
-import pymupdf
 import httpx
 from pydantic import BaseModel, Field
 
 from refit.models.adapter import ModelClient, ModelRequest
+from refit.pdf import page_count, page_text, render_page_png
 from refit.record.claims import ClaimStatus, Evidence, OptStrClaim, ProducedBy, StrListClaim
 from refit.record.model import CardRecord, ConfigurationBaseline, DistributionInfo, Source
 from refit.review.finalize import StageOutcome, finalize_stage
@@ -136,17 +136,16 @@ def _cache_path(path: Path, cache_root: Path) -> str:
         return str(path)
 
 
+def _cover_indices(pdf_path: Path) -> range:
+    return range(min(COVER_PAGES, page_count(pdf_path)))
+
+
 def cover_text(pdf_path: Path) -> str:
-    with pymupdf.open(str(pdf_path)) as doc:
-        return "\n".join(doc[i].get_text() for i in range(min(COVER_PAGES, doc.page_count)))
+    return "\n".join(page_text(pdf_path, i) for i in _cover_indices(pdf_path))
 
 
 def cover_images(pdf_path: Path, dpi: int = 200) -> tuple[bytes, ...]:
-    with pymupdf.open(str(pdf_path)) as doc:
-        return tuple(
-            doc[i].get_pixmap(dpi=dpi).tobytes("png")
-            for i in range(min(COVER_PAGES, doc.page_count))
-        )
+    return tuple(render_page_png(pdf_path, i, dpi=dpi) for i in _cover_indices(pdf_path))
 
 
 def read_cover(pdf_path: Path, client: ModelClient) -> tuple[str, str]:

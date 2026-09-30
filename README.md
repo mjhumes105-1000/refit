@@ -106,4 +106,4 @@ Add `--replay` to `intake` to run only from cached model replies, with no live c
 
 ## Credits
 
-Built with [Claude Code](https://claude.com/claude-code). Uses [Pydantic](https://docs.pydantic.dev/), [PyMuPDF](https://pymupdf.readthedocs.io/), [httpx](https://www.python-httpx.org/), and the [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python).
+Built with [Claude Code](https://claude.com/claude-code). Uses [Pydantic](https://docs.pydantic.dev/), [pypdfium2](https://github.com/pypdfium2-team/pypdfium2) (PDFium), [httpx](https://www.python-httpx.org/), and the [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python).
