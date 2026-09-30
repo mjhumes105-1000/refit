@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import fitz  # PyMuPDF
 import pytest
 
 from refit.record.claims import (
@@ -132,3 +133,46 @@ class RoutingProvider:
 @pytest.fixture
 def routing_provider():
     return RoutingProvider
+
+
+COVER_TEXT_A = (
+    "TECHNICAL MANUAL TM 11-5840-000-34\n"
+    "DIRECT SUPPORT MAINTENANCE MANUAL - SERVO AMPLIFIER CARD\n"
+    "DISTRIBUTION STATEMENT A: Approved for public release;\n"
+    "distribution is unlimited.\n"
+    "HEADQUARTERS, DEPARTMENT OF THE ARMY  1 JUNE 1985"
+)
+COVER_TEXT_C = COVER_TEXT_A.replace(
+    "DISTRIBUTION STATEMENT A: Approved for public release;\ndistribution is unlimited.",
+    "DISTRIBUTION STATEMENT C: Distribution authorized to U.S. Government agencies and their contractors.",
+)
+COVER_INFO_REPLY = (
+    '{"title": "Servo Amplifier Card", "tm_number": "TM 11-5840-000-34", '
+    '"edition": "1 June 1985", "changes": ["C1", "C2"], '
+    '"effectivity": "Serial 100 and up", "card_part_numbers": ["SM-C-555123"]}'
+)
+
+
+def make_pdf_file(path, pages):
+    """pages: list of page texts; an empty string makes an image-only (scanned-like) page."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = fitz.open()
+    for text in pages:
+        page = doc.new_page()
+        if text:
+            page.insert_text((72, 72), text, fontsize=10)
+        else:
+            page.draw_rect(fitz.Rect(72, 72, 300, 300))
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+@pytest.fixture
+def make_pdf():
+    return make_pdf_file
+
+
+@pytest.fixture
+def cover():
+    return SimpleNamespace(text_a=COVER_TEXT_A, text_c=COVER_TEXT_C, info_reply=COVER_INFO_REPLY)
