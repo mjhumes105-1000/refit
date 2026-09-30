@@ -26,6 +26,9 @@ from refit.stages.s00_intake import (
         "DISTRIBUTION STATEMENT: A",
         "APPROVED FOR PUBLIC RELEASE; DISTRIBUTION IS UNLIMITED",
         "Approved for public release,\ndistribution unlimited",
+        # older wording common in Navy manuals and DTIC reports
+        "This document has been approved for public release and sale; its distribution is unlimited.",
+        "Approved for public release and sale;\ndistribution unlimited.",
     ],
 )
 def test_gate_accepts_distribution_a_variants(text):
@@ -39,6 +42,8 @@ def test_gate_accepts_distribution_a_variants(text):
         ("DISTRIBUTION STATEMENT A: public release.\nChange 2 ... DISTRIBUTION STATEMENT D", "non-A"),
         ("TECHNICAL MANUAL TM 11-5840-000-34", "no Distribution A"),
         ("DISTRIBUTION STATEMENT Applies to all users", "no Distribution A"),
+        ("Approved for public release and sale.", "no Distribution A"),
+        ("Approved for public release and sale; distribution authorized to DoD components only.", "restrict"),
         # review finding 1: restrictions without a lettered statement must also stop the gate
         ("Approved for public release; distribution is unlimited.\n"
          "Distribution authorized to U.S. Government agencies only.", "restrict"),

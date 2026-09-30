@@ -71,4 +71,4 @@ The card itself runs at +32 V or less, and at about 60–70 parts it fits the si
 - **Surplus availability:** unverified for every candidate.
 
 ## Gate note
-Candidate 2's older wording, "approved for public release and sale; its distribution is unlimited", has no statement letter. REFIT's intake gate accepts "approved for public release … distribution is unlimited", but the words "and sale" sit between them. Check that the gate's public-release pattern matches this exact wording before running intake on candidate 2.
+Candidate 2 uses the older wording, "approved for public release and sale; its distribution is unlimited", with no statement letter. The intake gate now accepts that wording; restriction markings are still rejected.

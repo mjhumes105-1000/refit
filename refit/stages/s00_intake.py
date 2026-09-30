@@ -53,7 +53,9 @@ _RESTRICTED_RE = re.compile(
     re.IGNORECASE,
 )
 _PUBLIC_RE = re.compile(
-    r"APPROVED\s+FOR\s+PUBLIC\s+RELEASE\s*[;:,.]?\s*DISTRIBUTION\s+(?:IS\s+)?UNLIMITED",
+    # also the older "approved for public release and sale; its distribution is unlimited"
+    r"APPROVED\s+FOR\s+PUBLIC\s+RELEASE(?:\s+AND\s+SALE)?\s*[;:,.]?\s*"
+    r"(?:ITS\s+)?DISTRIBUTION\s+(?:IS\s+)?UNLIMITED",
     re.IGNORECASE,
 )
 
