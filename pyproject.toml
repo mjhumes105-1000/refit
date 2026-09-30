@@ -1,0 +1,24 @@
+[project]
+name = "refit"
+version = "0.1.0"
+description = "REFIT - Rapid Electronics Form-fit-function Integration Tool"
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.8",
+  "pymupdf>=1.24",
+  "httpx>=0.27",
+  "anthropic>=0.60",
+]
+
+[project.scripts]
+refit = "refit.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
