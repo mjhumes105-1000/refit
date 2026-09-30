@@ -88,6 +88,12 @@ def baseline(**values) -> ConfigurationBaseline:
             produced_by=HUMAN_S00, status=ClaimStatus.ACCEPTED,
         ),
         host_system=given("host_system"),
+        distribution_statement=OptStrClaim(
+            id="config:distribution_statement",
+            value="DISTRIBUTION STATEMENT A: Approved for public release; distribution is unlimited.",
+            confidence=1.0,
+            produced_by=ProducedBy(kind="deterministic", stage="s00", detail="text layer"),
+        ),
         confirmation=OptStrClaim(
             id="config:confirmation", value=None, confidence=1.0,
             produced_by=ProducedBy(kind="deterministic", stage="s00"),

@@ -52,12 +52,15 @@ def _latest(card_dir: Path) -> tuple[str, CardRecord]:
     return found
 
 
-def _refinalize(card_dir: Path) -> StageOutcome:
-    stage, record = _latest(card_dir)
-    outcome = finalize_stage(record, card_dir, stage, STAGE_CHECKS.get(stage, []))
+def _warn_orphans(outcome: StageOutcome) -> StageOutcome:
     for orphan in outcome.orphans:
         print(f"warning: override for {orphan} matches no claim", file=sys.stderr)
     return outcome
+
+
+def _refinalize(card_dir: Path) -> StageOutcome:
+    stage, record = _latest(card_dir)
+    return _warn_orphans(finalize_stage(record, card_dir, stage, STAGE_CHECKS.get(stage, [])))
 
 
 def _now() -> datetime:
@@ -66,7 +69,7 @@ def _now() -> datetime:
 
 def cmd_intake(args: argparse.Namespace) -> int:
     card_dir, cache_root = _paths(args)
-    outcome = run_intake(
+    outcome = _warn_orphans(run_intake(
         card_id=args.card_id,
         manual_uri=args.manual,
         host_system=args.host_system,
@@ -76,7 +79,7 @@ def cmd_intake(args: argparse.Namespace) -> int:
         card_pn=args.card_pn,
         card_revision=args.card_rev,
         photo_uris=args.photo or (),
-    )
+    ))
     record = outcome.record
     print(f"distribution: {record.distribution.statement}  (read via {record.distribution.method})")
     print(f"snapshot: {outcome.snapshot}")

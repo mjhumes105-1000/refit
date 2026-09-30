@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from refit.record.claims import ClaimStatus
+from refit.record.config_gate import CONFIRMATION_ID, REQUIRED_CONFIG_IDS
 from refit.record.model import CardRecord, Resolution, ReviewItem
 from refit.record.overrides import Override, OverrideSet, add_override
 from refit.record.walk import iter_claims
@@ -62,6 +63,10 @@ def resolve_item(
     item = record.review_items.get(item_id)
     if item is None:
         raise ReviewError(f"no review item {item_id!r}")
+    if item.claim_id == CONFIRMATION_ID:
+        raise ReviewError("the configuration baseline is confirmed with `refit confirm-config`, not accept/resolve")
+    if value in (None, "") and item.claim_id in REQUIRED_CONFIG_IDS:
+        raise ReviewError(f"{item.claim_id} is a required configuration field and cannot be empty")
     override = Override(
         claim_id=item.claim_id,
         value=value,

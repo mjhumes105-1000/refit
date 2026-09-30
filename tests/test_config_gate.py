@@ -10,7 +10,8 @@ from refit.record.config_gate import (
     require_confirmed,
 )
 from refit.review.finalize import finalize_stage
-from refit.review.queue import accept_item, open_items
+from refit.record.overrides import Override, add_override
+from refit.review.queue import ReviewError, accept_item, open_items, resolve_item
 
 T0 = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
 CHECKS = [ConfigConsistencyCheck()]
@@ -68,7 +69,12 @@ def test_photo_revision_mismatch_blocks_after_confirmation(mk, tmp_path):
     assert items["config:observed_revision:photo1"] == "config_consistency.revision_mismatch"
     with pytest.raises(ConfigurationNotConfirmed, match="observed_revision"):
         require_confirmed(rec)
+    # accepting the mismatched reading does not make the configuration consistent
     accept_item(tmp_path, rec, "rv:config:observed_revision:photo1", by="mh", now=T0)
+    with pytest.raises(ConfigurationNotConfirmed, match="revision"):
+        require_confirmed(finalize(rec, tmp_path))
+    # a human correcting the misread photo value does
+    resolve_item(tmp_path, rec, "rv:config:observed_revision:photo1", "C", by="mh", now=T0)
     require_confirmed(finalize(rec, tmp_path))
 
 
@@ -77,3 +83,33 @@ def test_require_confirmed_without_baseline_raises(mk):
     rec.config = None
     with pytest.raises(ConfigurationNotConfirmed):
         require_confirmed(rec)
+
+
+def test_required_config_field_cannot_be_accepted_empty(mk, tmp_path):
+    # review finding 3: accepting a null revision must not open the gate
+    raw = mk.record()
+    raw.config = mk.baseline()
+    raw.config.card_revision = raw.config.tm_number.model_copy(update={"id": "config:card_revision", "value": None})
+    rec = finalize(raw, tmp_path)
+    with pytest.raises(ReviewError, match="cannot be empty"):
+        accept_item(tmp_path, rec, "rv:config:card_revision", by="mh", now=T0)
+
+
+def test_gate_rechecks_values_even_after_a_human_override(mk, tmp_path):
+    rec = finalize(mk.record(), tmp_path)
+    add_override(tmp_path, Override(claim_id="config:card_revision", value=None, by="mh", at=T0))
+    rec = finalize(rec, tmp_path)
+    with pytest.raises(ConfigurationNotConfirmed, match="card_revision"):
+        confirm_configuration(tmp_path, rec, by="mh", now=T0)
+    add_override(tmp_path, Override(claim_id="config:confirmation", value="mh", by="mh", at=T0))
+    with pytest.raises(ConfigurationNotConfirmed, match="card_revision"):
+        require_confirmed(finalize(rec, tmp_path))
+
+
+def test_confirmation_item_cannot_be_accepted_or_resolved(mk, tmp_path):
+    # review finding 4: only confirm-config may settle the confirmation item
+    rec = finalize(mk.record(), tmp_path)
+    with pytest.raises(ReviewError, match="confirm-config"):
+        accept_item(tmp_path, rec, "rv:config:confirmation", by="mh", now=T0)
+    with pytest.raises(ReviewError, match="confirm-config"):
+        resolve_item(tmp_path, rec, "rv:config:confirmation", "mh", by="mh", now=T0)

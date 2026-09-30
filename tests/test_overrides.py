@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -75,3 +76,32 @@ def test_overrides_file_round_trip_latest_wins(tmp_path):
     assert loaded.overrides["part:R1:value"].value == "2k"
     assert loaded.overrides["part:R1:value"].by == "reviewer2"
     assert loaded.overrides["part:R1:value"].at == T0
+
+
+def test_connection_override_is_orphan_when_no_stage_has_produced_connections(mk):
+    # review finding 6: a snapshot must not gain connections before any stage produced them
+    rec = mk.record()
+    rec.connections = {}
+    result = apply_overrides(rec, OverrideSet(overrides={"conn:U7.3": ov("conn:U7.3", "+5V")}))
+    assert result.record.connections == {}
+    assert result.orphans == ["conn:U7.3"]
+
+
+def test_hand_edited_overrides_file_is_normalized_on_load(tmp_path):
+    # review finding 7: overrides.json is human-edited; pin ids must normalize on load
+    entry = ov("conn:u1-2", "OUT").model_dump(mode="json")
+    (tmp_path / "overrides.json").write_text(
+        json.dumps({"overrides": {"conn:u1-2": entry}}), encoding="utf-8"
+    )
+    loaded = load_overrides(tmp_path)
+    assert list(loaded.overrides) == ["conn:U1.2"]
+    assert loaded.overrides["conn:U1.2"].claim_id == "conn:U1.2"
+
+
+def test_overrides_file_with_duplicate_pins_after_normalizing_is_rejected(tmp_path):
+    a, b = ov("conn:u1-2", "OUT").model_dump(mode="json"), ov("conn:U1.2", "_n1").model_dump(mode="json")
+    (tmp_path / "overrides.json").write_text(
+        json.dumps({"overrides": {"conn:u1-2": a, "conn:U1.2": b}}), encoding="utf-8"
+    )
+    with pytest.raises(OverrideValueError, match="U1.2"):
+        load_overrides(tmp_path)

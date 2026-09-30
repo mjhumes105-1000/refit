@@ -152,6 +152,7 @@ class ConfigurationBaseline(BaseModel):
     effectivity: OptStrClaim
     field_changes: StrListClaim
     host_system: OptStrClaim
+    distribution_statement: OptStrClaim
     confirmation: OptStrClaim
     observed_revisions: list[StrClaim] = Field(default_factory=list)
 

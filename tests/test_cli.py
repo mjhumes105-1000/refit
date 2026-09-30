@@ -96,3 +96,12 @@ def test_metrics_and_schema(env, capsys, tmp_path):
 def test_review_before_intake_exits_2(env, capsys):
     assert run(env, "review", "servo") == 2
     assert "run `refit intake` first" in capsys.readouterr().err
+
+
+def test_rerunning_intake_reports_orphaned_overrides(env, capsys):
+    # review finding 5
+    intake(env)
+    run(env, "override", "servo", "part:R99:value", "--value", "1k", "--by", "mh")
+    capsys.readouterr()
+    assert intake(env) == 0
+    assert "part:R99:value" in capsys.readouterr().err

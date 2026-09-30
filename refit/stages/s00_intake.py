@@ -34,7 +34,24 @@ COVER_INFO_SYSTEM = (
     "Use null or an empty list when a field is not printed. Never guess."
 )
 
-_STATEMENT_RE = re.compile(r"DISTRIBUTION\s+STATEMENT\s*[:\-]?\s*([A-F])\b", re.IGNORECASE)
+_STATEMENT_RE = re.compile(
+    r"DISTRIBUTION\s+STATEMENT[\s:\-\u2013\u2014(\[]*([A-FX])\b", re.IGNORECASE
+)
+# Restrictions that don't use a lettered statement (common before ~1990) or that
+# override one (export control, FOUO/CUI markings, proprietary legends).
+_RESTRICTED_RE = re.compile(
+    r"DISTRIBUTION\s+AUTHORIZED\s+TO"
+    r"|FURTHER\s+DISSEMINATION\s+ONLY"
+    r"|EXPORT\s+CONTROL"
+    r"|EXPORT\s+IS\s+RESTRICTED"
+    r"|ARMS\s+EXPORT\s+CONTROL\s+ACT"
+    r"|INTERNATIONAL\s+TRAFFIC\s+IN\s+ARMS"
+    r"|\bITAR\b"
+    r"|FOR\s+OFFICIAL\s+USE\s+ONLY|\bFOUO\b"
+    r"|CONTROLLED\s+UNCLASSIFIED|\bCUI\b"
+    r"|\bPROPRIETARY\b",
+    re.IGNORECASE,
+)
 _PUBLIC_RE = re.compile(
     r"APPROVED\s+FOR\s+PUBLIC\s+RELEASE\s*[;:,.]?\s*DISTRIBUTION\s+(?:IS\s+)?UNLIMITED",
     re.IGNORECASE,
@@ -66,6 +83,12 @@ def distribution_gate(text: str) -> str:
     if non_a:
         raise DistributionGateError(
             f"document carries non-A distribution statement(s): {', '.join(non_a)}; "
+            "REFIT only processes Distribution A"
+        )
+    restricted = _RESTRICTED_RE.search(flat)
+    if restricted:
+        raise DistributionGateError(
+            f"cover pages carry a restrictive marking ({restricted.group(0)!r}); "
             "REFIT only processes Distribution A"
         )
     match = _STATEMENT_RE.search(flat) or _PUBLIC_RE.search(flat)
@@ -144,8 +167,30 @@ def read_cover(pdf_path: Path, client: ModelClient) -> tuple[str, str]:
     return reply.text, "model_transcription"
 
 
+def _statement_claim(statement: str, method: str) -> OptStrClaim:
+    """Text-layer statements are read deterministically; a model transcription is
+    only a proposal, so it gets review-level confidence and needs a human."""
+    evidence = [Evidence(source_id="manual", method=method, page=1, excerpt=statement)]
+    if method == "text_layer":
+        return OptStrClaim(
+            id="config:distribution_statement", value=statement, confidence=1.0,
+            produced_by=ProducedBy(kind="deterministic", stage=STAGE, detail="text layer"),
+            evidence=evidence,
+        )
+    return OptStrClaim(
+        id="config:distribution_statement", value=statement, confidence=MODEL_COVER_CONFIDENCE,
+        produced_by=ProducedBy(kind="model", stage=STAGE, detail=f"cover_transcribe:v{PROMPT_VERSION}"),
+        evidence=evidence,
+    )
+
+
 def _baseline(
-    info: CoverInfo, host_system: str, card_pn: str | None, card_revision: str | None
+    info: CoverInfo,
+    host_system: str,
+    card_pn: str | None,
+    card_revision: str | None,
+    statement: str,
+    method: str,
 ) -> ConfigurationBaseline:
     human = ProducedBy(kind="human", stage=STAGE, detail="intake arguments")
     model = ProducedBy(kind="model", stage=STAGE, detail=f"cover_info:v{PROMPT_VERSION}")
@@ -179,6 +224,7 @@ def _baseline(
             produced_by=human, status=ClaimStatus.ACCEPTED,
         ),
         host_system=given("host_system", host_system),
+        distribution_statement=_statement_claim(statement, method),
         confirmation=OptStrClaim(
             id="config:confirmation", value=None, confidence=1.0,
             produced_by=ProducedBy(kind="deterministic", stage=STAGE),
@@ -231,6 +277,6 @@ def run_intake(
         title=info.title or "",
         distribution=DistributionInfo(letter="A", statement=statement, source_id="manual", method=method),
         sources=sources,
-        config=_baseline(info, host_system, card_pn, card_revision),
+        config=_baseline(info, host_system, card_pn, card_revision, statement, method),
     )
     return finalize_stage(record, card_dir, STAGE, STAGE_CHECKS[STAGE])

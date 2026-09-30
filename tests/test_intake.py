@@ -39,6 +39,15 @@ def test_gate_accepts_distribution_a_variants(text):
         ("DISTRIBUTION STATEMENT A: public release.\nChange 2 ... DISTRIBUTION STATEMENT D", "non-A"),
         ("TECHNICAL MANUAL TM 11-5840-000-34", "no Distribution A"),
         ("DISTRIBUTION STATEMENT Applies to all users", "no Distribution A"),
+        # review finding 1: restrictions without a lettered statement must also stop the gate
+        ("Approved for public release; distribution is unlimited.\n"
+         "Distribution authorized to U.S. Government agencies only.", "restrict"),
+        ("DISTRIBUTION STATEMENT A: public release. WARNING - This document contains technical "
+         "data whose export is restricted by the Arms Export Control Act.", "restrict"),
+        ("DISTRIBUTION STATEMENT (C) U.S. Government only. Approved for public release", "non-A"),
+        ("DISTRIBUTION STATEMENT—C: DoD only. Approved for public release", "non-A"),
+        ("FOR OFFICIAL USE ONLY. DISTRIBUTION STATEMENT A: Approved for public release", "restrict"),
+        ("DISTRIBUTION STATEMENT A. Contains CUI. Approved for public release", "restrict"),
     ],
 )
 def test_gate_rejects_everything_else(text, message):
@@ -134,3 +143,33 @@ def test_url_sources_are_downloaded_once_and_photos_are_not_publishable(
     photo = out.record.sources["photo1"]
     assert photo.kind == "photo" and photo.publishable is False
     assert out.record.sources["manual"].cache_path.startswith("downloads")
+
+
+def test_scanned_cover_statement_needs_human_confirmation(tmp_path, make_pdf, cover, routing_provider):
+    # review finding 2: a model transcription alone must not settle the distribution question
+    card_dir, cache_root = workspace(tmp_path)
+    manual = make_pdf(tmp_path / "scan.pdf", [""])
+    provider = routing_provider(
+        {TRANSCRIBE_SYSTEM: json.dumps({"text": cover.text_a}), COVER_INFO_SYSTEM: cover.info_reply}
+    )
+    out = run_intake(
+        card_id="servo", manual_uri=str(manual), host_system="AN/XXX-1",
+        card_dir=card_dir, cache_root=cache_root, client=client_for(provider, cache_root),
+        card_revision="C",
+    )
+    items = {i.claim_id for i in open_items(out.record)}
+    assert "config:distribution_statement" in items
+
+
+def test_text_layer_statement_is_accepted_without_review(tmp_path, make_pdf, cover, routing_provider):
+    card_dir, cache_root = workspace(tmp_path)
+    manual = make_pdf(tmp_path / "tm.pdf", [cover.text_a])
+    provider = routing_provider({COVER_INFO_SYSTEM: cover.info_reply})
+    out = run_intake(
+        card_id="servo", manual_uri=str(manual), host_system="AN/XXX-1",
+        card_dir=card_dir, cache_root=cache_root, client=client_for(provider, cache_root),
+        card_revision="C",
+    )
+    claim = out.record.config.distribution_statement
+    assert claim.status is ClaimStatus.ACCEPTED
+    assert "DISTRIBUTION STATEMENT A" in claim.value.upper()

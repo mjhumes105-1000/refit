@@ -48,7 +48,19 @@ def load_overrides(card_dir: Path) -> OverrideSet:
     path = card_dir / OVERRIDES_FILE
     if not path.exists():
         return OverrideSet()
-    return OverrideSet.model_validate_json(path.read_text(encoding="utf-8"))
+    raw = OverrideSet.model_validate_json(path.read_text(encoding="utf-8"))
+    normalized: dict[str, Override] = {}
+    for override in raw.overrides.values():
+        try:
+            claim_id = normalize_claim_id(override.claim_id)
+        except ValueError as exc:
+            raise OverrideValueError(f"{path}: {exc}") from exc
+        if claim_id in normalized:
+            raise OverrideValueError(
+                f"{path} lists {claim_id} more than once after normalizing pin names"
+            )
+        normalized[claim_id] = override.model_copy(update={"claim_id": claim_id})
+    return OverrideSet(overrides=normalized)
 
 
 def save_overrides(card_dir: Path, overrides: OverrideSet) -> Path:
@@ -74,7 +86,7 @@ def apply_overrides(record: CardRecord, overrides: OverrideSet) -> ApplyResult:
         claim = index.get(override.claim_id)
         try:
             if claim is None:
-                if override.claim_id.startswith("conn:"):
+                if override.claim_id.startswith("conn:") and rec.connections:
                     pin = override.claim_id.removeprefix("conn:")
                     rec.connections[pin] = StrClaim(
                         id=override.claim_id,
