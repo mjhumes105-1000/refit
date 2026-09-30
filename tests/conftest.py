@@ -111,3 +111,24 @@ def sample_record() -> CardRecord:
 @pytest.fixture
 def mk():
     return SimpleNamespace(conn=conn, part=part, baseline=baseline, record=sample_record)
+
+
+class RoutingProvider:
+    """Answers each request by exact system prompt; records every call."""
+
+    name = "routing"
+
+    def __init__(self, routes: dict[str, str]):
+        self.routes = routes
+        self.calls: list[tuple[str, str, int]] = []
+
+    def complete(self, *, system, prompt, images):
+        self.calls.append((system, prompt, len(images)))
+        if system not in self.routes:
+            raise AssertionError(f"unexpected request with system prompt: {system[:60]!r}")
+        return self.routes[system]
+
+
+@pytest.fixture
+def routing_provider():
+    return RoutingProvider
