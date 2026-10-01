@@ -178,3 +178,73 @@ def test_text_layer_statement_is_accepted_without_review(tmp_path, make_pdf, cov
     claim = out.record.config.distribution_statement
     assert claim.status is ClaimStatus.ACCEPTED
     assert "DISTRIBUTION STATEMENT A" in claim.value.upper()
+
+
+# --- real DTIC scans: statement after front matter, garbled OCR text layer ---
+
+DTIC_HEADER = "AD-A139 850 TECHNICAL MANUAL FOR MODEL 066 SEARCHLIGHT POSITIONER UNCLASSIFIED F/G 3/1 NL"
+TEST_CHART = "MICROCOPY RESOLUTION TEST CHART NATIONAL BUREAU OF STANDARDS 1963-A"
+GARBLED = "TECHNICAL MANUAL FOR MODEL 066\nThis document has been avPp!Ov~ ~for public release and sale; its\ndistributionl is unlimited."
+CLEAN = "TECHNICAL MANUAL FOR MODEL 066\nThis document has been approved for public release and sale; its distribution is unlimited."
+
+
+def test_statement_on_page_four_is_found_in_text_layer(tmp_path, make_pdf, cover, routing_provider):
+    card_dir, cache_root = workspace(tmp_path)
+    manual = make_pdf(tmp_path / "dtic.pdf", [DTIC_HEADER, TEST_CHART, "blank page with some text here", CLEAN])
+    provider = routing_provider({COVER_INFO_SYSTEM: cover.info_reply})
+    out = run_intake(
+        card_id="a5", manual_uri=str(manual), host_system="Model 066",
+        card_dir=card_dir, cache_root=cache_root, client=client_for(provider, cache_root),
+    )
+    assert out.record.distribution.method == "text_layer"
+    assert [call[0] for call in provider.calls] == [COVER_INFO_SYSTEM]
+
+
+def test_garbled_text_layer_falls_back_to_human_confirmed_transcription(
+    tmp_path, make_pdf, cover, routing_provider
+):
+    card_dir, cache_root = workspace(tmp_path)
+    manual = make_pdf(tmp_path / "dtic.pdf", [DTIC_HEADER, TEST_CHART, "", GARBLED])
+    provider = routing_provider(
+        {TRANSCRIBE_SYSTEM: json.dumps({"text": CLEAN}), COVER_INFO_SYSTEM: cover.info_reply}
+    )
+    out = run_intake(
+        card_id="a5", manual_uri=str(manual), host_system="Model 066",
+        card_dir=card_dir, cache_root=cache_root, client=client_for(provider, cache_root),
+    )
+    assert out.record.distribution.method == "model_transcription"
+    assert provider.calls[0][0] == TRANSCRIBE_SYSTEM and provider.calls[0][2] == 4
+    assert "config:distribution_statement" in {i.claim_id for i in open_items(out.record)}
+
+
+def test_restriction_in_text_layer_is_never_overridden_by_transcription(
+    tmp_path, make_pdf, cover, routing_provider
+):
+    card_dir, cache_root = workspace(tmp_path)
+    manual = make_pdf(
+        tmp_path / "dtic.pdf",
+        [DTIC_HEADER, "DISTRIBUTION STATEMENT C: U.S. Government agencies and their contractors only.", GARBLED],
+    )
+    provider = routing_provider(
+        {TRANSCRIBE_SYSTEM: json.dumps({"text": CLEAN}), COVER_INFO_SYSTEM: cover.info_reply}
+    )
+    with pytest.raises(DistributionGateError, match="non-A"):
+        run_intake(
+            card_id="a5", manual_uri=str(manual), host_system="Model 066",
+            card_dir=card_dir, cache_root=cache_root, client=client_for(provider, cache_root),
+        )
+    assert provider.calls == []
+
+
+def test_transcription_without_a_statement_still_rejects(tmp_path, make_pdf, cover, routing_provider):
+    card_dir, cache_root = workspace(tmp_path)
+    manual = make_pdf(tmp_path / "dtic.pdf", [DTIC_HEADER, TEST_CHART, "", GARBLED])
+    provider = routing_provider(
+        {TRANSCRIBE_SYSTEM: json.dumps({"text": "TECHNICAL MANUAL FOR MODEL 066"}), COVER_INFO_SYSTEM: cover.info_reply}
+    )
+    with pytest.raises(DistributionGateError, match="no Distribution A"):
+        run_intake(
+            card_id="a5", manual_uri=str(manual), host_system="Model 066",
+            card_dir=card_dir, cache_root=cache_root, client=client_for(provider, cache_root),
+        )
+    assert not snapshot_path(card_dir, "s00").exists()

@@ -18,7 +18,7 @@ from refit.stages.registry import STAGE_CHECKS
 
 STAGE = "s00"
 PROMPT_VERSION = "1"
-COVER_PAGES = 3
+COVER_PAGES = 6  # DTIC/archive scans prepend ~3 front-matter pages before the real cover
 MIN_TEXT_LAYER_CHARS = 40
 MODEL_COVER_CONFIDENCE = 0.8  # no cross-check exists at intake, so cover facts go to review
 
@@ -64,6 +64,10 @@ class DistributionGateError(RuntimeError):
     pass
 
 
+class MissingStatementError(DistributionGateError):
+    """No statement of any kind was found (as opposed to a restrictive one)."""
+
+
 class CoverTranscription(BaseModel):
     text: str
 
@@ -95,7 +99,7 @@ def distribution_gate(text: str) -> str:
         )
     match = _STATEMENT_RE.search(flat) or _PUBLIC_RE.search(flat)
     if match is None:
-        raise DistributionGateError(
+        raise MissingStatementError(
             "no Distribution A statement found on the cover pages; REFIT only processes Distribution A"
         )
     return flat[match.start() : match.end() + 80].strip()
@@ -150,10 +154,24 @@ def cover_images(pdf_path: Path, dpi: int = 200) -> tuple[bytes, ...]:
     return tuple(render_page_png(pdf_path, i, dpi=dpi) for i in _cover_indices(pdf_path))
 
 
-def read_cover(pdf_path: Path, client: ModelClient) -> tuple[str, str]:
+def read_cover_and_gate(pdf_path: Path, client: ModelClient) -> tuple[str, str, str]:
+    """Return (cover text, method, Distribution A statement), or raise.
+
+    A non-A or restrictive marking in the text layer is final. Only a text layer with
+    no statement at all (e.g. garbled OCR on an old scan) falls back to the model
+    reading the page images, and that statement then needs human confirmation.
+    """
     text = cover_text(pdf_path)
     if len(text.strip()) >= MIN_TEXT_LAYER_CHARS:
-        return text, "text_layer"
+        try:
+            return text, "text_layer", distribution_gate(text)
+        except MissingStatementError:
+            pass
+    text = _transcribe_cover(pdf_path, client)
+    return text, "model_transcription", distribution_gate(text)
+
+
+def _transcribe_cover(pdf_path: Path, client: ModelClient) -> str:
     reply = client.ask(
         ModelRequest(
             stage=STAGE,
@@ -165,7 +183,7 @@ def read_cover(pdf_path: Path, client: ModelClient) -> tuple[str, str]:
         ),
         CoverTranscription,
     )
-    return reply.text, "model_transcription"
+    return reply.text
 
 
 def _statement_claim(statement: str, method: str) -> OptStrClaim:
@@ -247,8 +265,7 @@ def run_intake(
     http: httpx.Client | None = None,
 ) -> StageOutcome:
     manual_path = fetch_to_cache(manual_uri, cache_root, http=http)
-    text, method = read_cover(manual_path, client)
-    statement = distribution_gate(text)  # hard stop before anything is written
+    text, method, statement = read_cover_and_gate(manual_path, client)  # hard stop on failure
 
     sources = {
         "manual": Source(

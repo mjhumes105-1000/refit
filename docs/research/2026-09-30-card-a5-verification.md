@@ -11,7 +11,7 @@ PDF page 4, the manual's own cover, carries the stamp **"This document has been 
 1. **Page 4 is outside the gate's 3 cover pages.** Pages 1–3 are DTIC front matter: a microfiche header and the "microcopy resolution test chart".
 2. **The OCR text layer is garbled:** `This document has been avPp!Ov~ ~for public release and sale; its distributionl is unlimited.` The regex can't match it.
 
-Proposed gate change, as a separate approved task:
+Gate change (implemented 2026-09-30):
 - Read past DTIC front matter (for example, scan the first 6 pages).
 - When the text layer holds no statement, fall back to the model transcribing the page images. That path already sends the statement to human review (`config:distribution_statement`), so the gate stays fail-closed and human-confirmed.
 
@@ -74,6 +74,6 @@ Proposed gate change, as a separate approved task:
 - No surplus unit has been found yet.
 
 ## Next steps
-1. Decide on the gate change above, so `refit intake` can run on this real manual.
+1. Run `refit intake` on this manual with a live model. The text layer routes to transcription; confirm the statement in review.
 2. Hand-build the reference netlist in KiCad from Fig. 7.11, then fill in columns 1–2 from Figs 7.12 and 7.13 and the parts list.
 3. Plan Milestone 3 (parts list + schematic extraction) around this manual. The parts-list OCR is good; the schematic needs image-based extraction.
